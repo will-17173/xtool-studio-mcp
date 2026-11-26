@@ -22,6 +22,32 @@ The demo reads contours, cutouts, and quantities from the Twin Lens Camera r15 p
 
 ## 安装与连接 · Setup
 
+### 使用 AI 安装 · Install with an AI agent
+
+将下方提示词复制给可以运行本地命令的 AI 编程助手，例如 Codex。 / Copy either prompt into an AI coding agent that can run local commands, such as Codex.
+
+```text
+请在这台电脑上安装并配置 xTool Studio MCP。
+仓库在 https://github.com/will-17173/xtool-studio-mcp/tree/studio-local。
+请优先使用已有的本地仓库。若本地没有，再克隆 studio-local 分支。
+读取 README 的安装步骤，识别当前系统是 Windows 还是 macOS，检查 Node.js 和仓库指定的 pnpm 版本，然后安装依赖并构建。
+请为 DXF 转换配置可导入 ezdxf 的 Python，并按需设置 XTOOL_DXF_PYTHON。
+把构建后的 stdio 服务以 xtool-studio 为名称注册到当前 MCP 客户端，使用 Node.js 和服务入口的绝对路径，保留其他 MCP 配置。
+验证注册是否成功。若当前会话已经能访问新服务，请调用 studio_status；若需要新会话才能加载，请告诉我如何验证。
+最后汇报安装路径、验证结果，以及需要我手动完成的系统授权。
+```
+
+```text
+Install and configure xTool Studio MCP on this computer.
+Use https://github.com/will-17173/xtool-studio-mcp/tree/studio-local.
+Reuse an existing local checkout if available, or clone the studio-local branch.
+Read the README setup steps, detect Windows or macOS, check Node.js and the pinned pnpm version, then install dependencies and build.
+Set up a Python interpreter that can import ezdxf for DXF conversion and set XTOOL_DXF_PYTHON if needed.
+Register the built stdio server as xtool-studio in the current MCP client. Use absolute paths to Node.js and the server entry point, and preserve other MCP settings.
+Verify registration. Call studio_status if the server is available in this session. If the client needs a new session, tell me how to verify it there.
+Report the installation path, verification result, and any system permissions I need to grant manually.
+```
+
 需要 Windows 或 macOS、Node.js 18+ 和 pnpm。仓库指定 pnpm 10.34.3。使用 DXF 转换时，还需要安装了 `ezdxf` 的 Python。
 
 Requires Windows or macOS, Node.js 18+, and pnpm. The repository pins pnpm 10.34.3. DXF conversion also requires Python with `ezdxf` installed.
