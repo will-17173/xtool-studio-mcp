@@ -6,9 +6,15 @@ A local MCP server that connects Codex and other MCP clients to xTool Studio. Co
 
 ## 功能演示 · Demo
 
-[观看 12 秒演示 / Watch the 12-second demo (MP4)](./docs/media/studio-demo.mp4)
+[观看 19 秒自动排版演示 / Watch the 19-second nesting demo (MP4)](./docs/media/studio-demo.mp4)
 
-演示使用一个测试板件，从 SVG 生成 XCS，在 Studio 打开并查看图层和对象，最后打开 3D 加工预览。 / The demo converts a sample SVG panel to XCS, opens it in Studio, inspects its layers and objects, and opens the 3D processing preview.
+演示从 Twin Lens Camera r15 的项目源文件读取轮廓、孔槽和数量，通过独立排版脚本把 70 件零件排到五张 190 × 150 mm 板上。MCP 将每板 SVG 转成 XCS，并在 xTool Studio 中打开第 5 板。演示只使用几何轮廓，原生产文件中的 UV 对位和留桥不属于这次排版输出。
+
+The demo reads contours, cutouts, and quantities from the Twin Lens Camera r15 project source files. A separate script nests 70 parts on five 190 × 150 mm sheets. The MCP server converts each sheet SVG to XCS and opens Sheet 05 in xTool Studio. The demo uses geometry only. Its output omits the original production files’ UV registration and hold tabs.
+
+![五张板的自动排版结果 / Automatic nesting results across five sheets](./docs/media/studio-nesting.png)
+
+下方截图另用测试板件展示图层与预览。 / The screenshots below use a separate sample panel to show layers and preview.
 
 | 图层与对象 · Layers and objects | 3D 加工预览 · 3D processing preview |
 | --- | --- |
