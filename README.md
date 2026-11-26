@@ -146,3 +146,23 @@ pnpm start:stdio
 This project builds on the upstream machine knowledge base, project generators, MCP resources, and prompts. It retains the original MIT license and Git history. The repository also contains the upstream Cloudflare Worker source. Studio desktop tools run through the local stdio server.
 
 [上游项目 / Upstream project](https://github.com/iamcoyr/xtool-mcp) · [架构 / Architecture](./docs/architecture.md) · [XCS 格式 / XCS format](./docs/xcs-format.md) · [贡献 / Contributing](./CONTRIBUTING.md) · [使用说明 / Disclaimer](./DISCLAIMER.md) · [MIT 许可 / License](./LICENSE)
+
+## 相比上游的改动 · Changes from upstream
+
+对比基准为上游 `iamcoyr/xtool-mcp` 的 `main` 分支提交 `f3195c9`。 / The comparison uses commit `f3195c9` on the upstream `iamcoyr/xtool-mcp` `main` branch.
+
+### 新增功能 · Added
+
+| 中文 | English |
+| --- | --- |
+| **Studio 桌面控制。** 本地 MCP 可打开 XS/XCS、查看工程与设备状态、选择图层或对象、修改加工参数、保存本地 XS 和打开加工预览。加入 Windows 和 macOS 适配器。Windows 已在 Studio 1.9.11 实测，macOS 待实机验证。 | **Studio desktop control.** The local MCP server opens XS/XCS files, reads project and device status, selects layers or objects, edits processing settings, saves local XS projects, and opens the processing preview. Windows was tested on Studio 1.9.11. The macOS adapter awaits testing on a Mac. |
+| **本地文件转换。** 新增平面 DXF 转 XCS，支持为无单位 DXF 指定源单位。新增直接读取本地 SVG 并保存为 XCS 的工具。 | **Local file conversion.** Convert planar DXF files to XCS with an explicit source unit for unitless drawings. A local SVG file can also be converted directly to XCS. |
+| **工程检查与另存修订。** 读取 XS v2 和 XCS 的画布、图形及加工参数。支持另存加工参数修订，以及在 XS 中改名或移动图形到已有颜色层。 | **Project inspection and revisions.** Read canvases, shapes, and processing settings in XS v2 and XCS. Save processing revisions to a new file, or rename layers and shapes and move shapes between existing color layers in XS. |
+| **xTool M2。** 新增机型条目及 XCS 生成支持，默认使用 10W 蓝光模块。 | **xTool M2.** Added a machine entry and XCS generation support with the 10W blue laser module as the default. |
+
+### 修复与加固 · Fixes and safeguards
+
+| 中文 | English |
+| --- | --- |
+| **SVG 路径保真。** 修正相对路径、贝塞尔曲线和圆弧的包围盒计算，保留开放路径，并忽略注释里的图形。遇到无法准确转换的缩放、变换或元素时明确报错，避免静默生成错误刀线。 | **SVG path fidelity.** Corrected bounds for relative commands, Bézier curves, and arcs, preserved open paths, and ignored commented-out geometry. Unsupported scaling, transforms, and elements now produce explicit errors. |
+| **多画布 XCS 校验。** 在各自画布内匹配图形与加工参数，报告引用缺失或跨画布错配。遇到空文档或无效图形条目时返回结构化错误。 | **Multi-canvas XCS validation.** Match shapes and processing settings within each canvas, report missing or mismatched references, and return structured errors for null documents or invalid shape entries. |
