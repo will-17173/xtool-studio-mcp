@@ -402,6 +402,97 @@ public static class StudioAccessibility {
     }
   }
 
+  static Node[] UnsavedControls(Node[] nodes, bool buttons) {
+    var matches = new List<Node>();
+    for (int i = 0; i < nodes.Length; i++) {
+      Node dialog = nodes[i];
+      if (dialog.Role != 18) continue;
+      if (dialog.Name != "Unsaved changes" && dialog.Name != "\u5185\u5bb9\u672a\u4fdd\u5b58") continue;
+      if (!buttons) { matches.Add(dialog); continue; }
+      for (int j = i + 1; j < nodes.Length && nodes[j].Depth > dialog.Depth; j++) {
+        Node button = nodes[j];
+        if (button.Role != 43 || (button.Name != "Don't Save" && button.Name != "Don't save" &&
+            button.Name != "\u4e0d\u4fdd\u5b58")) continue;
+        object state = ReadState(button.Element, button.ChildId);
+        if (state is int && ((int)state & (0x1 | 0x8000 | 0x10000)) == 0 &&
+            !String.IsNullOrEmpty(button.Element.get_accDefaultAction(button.ChildId))) matches.Add(button);
+      }
+    }
+    return matches.ToArray();
+  }
+
+  public static string CloseProject(IntPtr[] windows, string expectedPath, string title, bool discard) {
+    var targets = new List<Node>();
+    var pendingDialogs = new List<Node>();
+    var pendingButtons = new List<Node>();
+    IntPtr targetWindow = IntPtr.Zero;
+    int documents = 0;
+    foreach (IntPtr window in windows) {
+      Node[] nodes = Read(window);
+      pendingDialogs.AddRange(UnsavedControls(nodes, false));
+      pendingButtons.AddRange(UnsavedControls(nodes, true));
+      foreach (Node node in nodes) {
+        if (node.Role != 15 || node.Name != title + " - xTool Studio" ||
+            !IsEditor(node.Value)) continue;
+        if (expectedPath == "" || MatchesProject(node.Value, expectedPath)) documents++;
+      }
+      // Studio 1.9 exposes the tab strip in the shell document. Its close
+      // affordance is an unnamed clickable group immediately after the label.
+      for (int i = 1; i + 2 < nodes.Length; i++) {
+        Node label = nodes[i], close = nodes[i + 1], icon = nodes[i + 2];
+        if (label.Role != 41 || label.Name != title ||
+            close.Depth != label.Depth || close.Role != 20 || !String.IsNullOrEmpty(close.Name) ||
+            icon.Depth != close.Depth + 1 || icon.Role != 40) continue;
+        int row = i - 1;
+        while (row >= 0 && nodes[row].Depth >= label.Depth) row--;
+        if (row < 0 || nodes[row].Role != 20 || nodes[row].Depth != label.Depth - 1) continue;
+        int shell = row - 1;
+        while (shell >= 0 && nodes[shell].Role != 15) shell--;
+        if (shell < 0 || nodes[shell].Value != "atomm://renderer/shell" ||
+            nodes[shell].Depth >= nodes[row].Depth) continue;
+        string action = close.Element.get_accDefaultAction(close.ChildId);
+        if (action != "Click" && action != "\u70b9\u51fb") continue;
+        object state = ReadState(close.Element, close.ChildId);
+        if (!(state is int) || ((int)state & (0x1 | 0x8000 | 0x10000)) != 0) continue;
+        targets.Add(close);
+        targetWindow = window;
+      }
+    }
+    if (pendingDialogs.Count > 0) {
+      if (!discard) return "save_prompt_pending";
+      if (pendingDialogs.Count != 1 || pendingButtons.Count != 1) return "discard_control_unavailable";
+      pendingButtons[0].Element.accDoDefaultAction(pendingButtons[0].ChildId);
+      return "pending_discarded";
+    }
+    if (documents != 1 || targets.Count != 1) return "close_control_unavailable";
+    targets[0].Element.accDoDefaultAction(targets[0].ChildId);
+    bool discarded = false;
+    var deadline = System.Diagnostics.Stopwatch.StartNew();
+    while (deadline.ElapsedMilliseconds < 2200) {
+      Node[] nodes = Read(targetWindow);
+      bool open = Array.Exists(nodes, node => node.Role == 15 &&
+        node.Name == title + " - xTool Studio" && IsEditor(node.Value) &&
+        (expectedPath == "" || MatchesProject(node.Value, expectedPath)));
+      if (!open) return discarded ? "discarded" : "invoked";
+      Node[] prompts = UnsavedControls(nodes, false);
+      if (prompts.Length > 0 && !discarded) {
+        if (!discard) return "save_prompt_pending";
+        Node[] buttons = UnsavedControls(nodes, true);
+        if (prompts.Length != 1 || buttons.Length != 1) return "discard_control_unavailable";
+        buttons[0].Element.accDoDefaultAction(buttons[0].ChildId);
+        discarded = true;
+      }
+      System.Threading.Thread.Sleep(100);
+    }
+    return discarded ? "discarded" : "invoked";
+  }
+
+  static bool IsEditor(string value) {
+    Uri uri;
+    return Uri.TryCreate(value, UriKind.Absolute, out uri) &&
+      uri.Scheme == "atomm" && uri.Host == "renderer" && uri.AbsolutePath == "/editor/";
+  }
+
   static bool MatchesProject(string value, string expectedPath) {
     Uri uri;
     if (!Uri.TryCreate(value, UriKind.Absolute, out uri) ||
@@ -473,6 +564,14 @@ $name = [Text.Encoding]::UTF8.GetString([Convert]::FromBase64String('${encoded}'
 
 export function saveProjectScript(path: string) {
   return editorActionScript(path) + "[StudioAccessibility]::SaveProject($handles, $path)\n";
+}
+
+export function closeProjectScript(path: string | null, title: string, discard: boolean) {
+  const encodedTitle = Buffer.from(title, "utf8").toString("base64");
+  return editorActionScript(path ?? "") + String.raw`
+$title = [Text.Encoding]::UTF8.GetString([Convert]::FromBase64String('${encodedTitle}'))
+[StudioAccessibility]::CloseProject($handles, $path, $title, $${discard})
+`;
 }
 
 export function moveObjectToLayerScript(path: string, name: string, colorIndex: number, objectName: string) {

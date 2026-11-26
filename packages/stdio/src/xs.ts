@@ -2,6 +2,7 @@ import { readFile, writeFile } from "node:fs/promises";
 import { randomUUID } from "node:crypto";
 import { strFromU8, strToU8, unzipSync, zipSync } from "fflate";
 import { z } from "zod";
+import { printCutMode } from "./print-cut.js";
 
 const record = z.object({}).passthrough();
 const moduleId = z.string().regex(/^[A-Za-z0-9_-]+$/);
@@ -78,7 +79,8 @@ function canvasSettings(processing: Processing | undefined, profiles: Profiles) 
           : { powerPct: values.power }),
         speedMmS: values.speed,
         passes: values.repeat,
-        processHead: values.processHead
+        processHead: values.processHead,
+        laserModule: values.laser
       });
       settings.set(id, operations);
     }
@@ -130,6 +132,7 @@ export async function inspectXs(path: string) {
     activeCanvasId: project.activeCanvasId,
     activeDeviceId: project.activeDeviceId,
     machine: activeDevice?.extName ?? activeDevice?.extId ?? null,
+    laserPowerW: activeDevice?.power,
     canvases: project.modules.canvases.map(id => {
       const canvas = readCanvas(archive, id);
       const { mode, settings, ignored } = canvasSettings(processing[id], profiles);
@@ -145,7 +148,8 @@ export async function inspectXs(path: string) {
           };
         });
       });
-      return { id, name: canvas.title, layers: canvas.layerData, mode, shapes };
+      return { id, name: canvas.title, layers: canvas.layerData, mode,
+        ...(activeDevice?.extId === "JS002" && mode === printCutMode && { modeName: "Print then Cut" }), shapes };
     })
   };
 }

@@ -98,6 +98,30 @@ Use `xtool-studio` in a new Codex session. For other MCP clients, configure **st
 - **Edit in Studio.** Use `studio_list_editors` to inspect the project and selection. Select a layer or shape, set its parameters, and open the preview. Use `studio_save_live_project` to save an existing local XS project.
 - **Write a project revision.** Use `studio_inspect_project` to get canvas and shape IDs, then write edits to a new XS or XCS file. File revision tools require a new output path.
 
+### M2 先印后切 · M2 Print then Cut
+
+1. 为每张板准备一张覆盖整板的 PNG 和一份与它共用坐标的平面 DXF。DXF 需要声明长度单位，PNG 的宽高比应与板材尺寸一致。
+2. 调用 `studio_create_m2_print_cut_project`，指定一个新的绝对 `.xs` 输出路径。每张板传入唯一的 `name`、绝对 `pngPath` 和 `dxfPath`、板材尺寸 `widthMm` 和 `heightMm`，以及 PNG 左上角在 DXF 坐标中的 `dxfTopLeftXMm` 和 `dxfTopLeftYMm`。坐标以毫米为单位，DXF 的 Y 轴向上。整份工程共用 `materialThicknessMm`、`powerPct`、`speedMmS` 和 `passes`。
+3. 工具为每张板生成一个画布，在右侧 300 × 284 mm 喷墨区域内居中放置整板图稿和成组刀线。用 `studio_inspect_project` 确认模式为 **Print then Cut**，再用 `studio_open_project` 在 Studio 中核对印切对位和参数。
+
+1. Prepare one full-board PNG and a planar DXF that shares its coordinate system for each board. The DXF must declare its drawing units, and the PNG aspect ratio must match the board dimensions.
+2. Call `studio_create_m2_print_cut_project` with an absolute path for a new `.xs` file. For each board, supply a unique `name`, absolute `pngPath` and `dxfPath`, board dimensions `widthMm` and `heightMm`, and the PNG's top-left corner in DXF coordinates as `dxfTopLeftXMm` and `dxfTopLeftYMm`. Coordinates are in millimeters with Y pointing up in the DXF. All boards share `materialThicknessMm`, `powerPct`, `speedMmS`, and `passes`.
+3. The tool creates one canvas per board, centering the artwork and grouped cut contours in the right-hand 300 × 284 mm inkjet area. Check for **Print then Cut** mode with `studio_inspect_project`, then use `studio_open_project` to review alignment and settings in Studio.
+
+### 关闭全部项目 · Close all projects
+
+在 Windows 上，调用 `studio_close_all_projects` 并传入 `{}`，遇到保存提示时会停下来。确认要放弃所有未保存修改时，传入以下参数。已在 Studio 1.9.11 验证，工具会在保存提示中选择「不保存」，然后继续关闭其余项目。
+
+On Windows, call `studio_close_all_projects` with `{}` to stop at the first save prompt. Use the arguments below when you want to discard all unsaved changes. Verified on Studio 1.9.11, where the tool selects **Don't Save** and continues closing the remaining projects.
+
+```json
+{"onUnsaved":"discard"}
+```
+
+返回值里的 `closed` 和 `remaining` 列出已关闭和仍打开的项目。若返回 `partial`，可以用相同参数继续。最后调用 `studio_list_editors`，确认 `editors` 为空。
+
+The response lists closed and open projects in `closed` and `remaining`. If the status is `partial`, call the tool again with the same arguments. Then call `studio_list_editors` and confirm that `editors` is empty.
+
 ## 工具清单 · Tool reference
 
 ### Studio 实时操作 · Live Studio tools
@@ -108,6 +132,8 @@ Use `xtool-studio` in a new Codex session. For other MCP clients, configure **st
 | `studio_list_editors` | 查看工程标签和可读的画布、图层及选区 | List project tabs and available canvas, layer, and selection details |
 | `studio_device_status` | 读取 Studio 显示的设备连接状态 | Read the connection indicator shown by Studio |
 | `studio_open_project` | 打开 XS 或 XCS 并尝试按完整路径确认标签 | Open XS or XCS and check for a tab matching the full path |
+| `studio_close_project` | 在 Windows 按绝对路径关闭项目标签 | Close a project tab by absolute path on Windows |
+| `studio_close_all_projects` | 在 Windows 逐个关闭项目。默认停在保存提示，可显式传入 `onUnsaved: "discard"` 全部不保存 | Close project tabs on Windows. Stops at save prompts by default. Pass `onUnsaved: "discard"` to discard unsaved changes |
 | `studio_select_layer` | 按名称选中图层中的对象 | Select objects on a named layer |
 | `studio_select_shape` | 按对象列表中的唯一名称选择 XS 图形 | Select an XS shape by its unique name in the live object list |
 | `studio_rename_live_layer` | 重命名前台工程中的图层 | Rename a layer in the foreground project |
@@ -120,8 +146,10 @@ Use `xtool-studio` in a new Codex session. For other MCP clients, configure **st
 
 | 工具 / Tool | 中文 | English |
 | --- | --- | --- |
+| `studio_create_m2_print_cut_project` | M2 10W 打印切割模式，按板导入 PNG 和 DXF 并保存为 XS | Create an M2 10W Print then Cut XS project with centered artwork and one DXF cut group per board |
 | `studio_convert_dxf_file` | 将平面 DXF 转为 XCS | Convert a planar DXF file to XCS |
 | `studio_convert_svg_file` | 将本地 SVG 转为 XCS | Convert a local SVG file to XCS |
+| `studio_create_m2_print_cut_project` | 将 1–30 组整板 PNG 和平面 DXF 合成一份 M2 10W 先印后切 XS v2 工程，每板一个画布 | Combine 1–30 full-board PNG and planar DXF pairs into one M2 10W Print then Cut XS v2 project with one canvas per board |
 | `studio_inspect_project` | 读取 XS v2 或 XCS 的画布、图形及可用参数 | Inspect canvases, shapes, and available settings in XS v2 or XCS |
 | `studio_rename_project_layer` | 重命名 XS 图层并另存 | Save an XS revision with a renamed layer |
 | `studio_move_shapes_to_layer` | 按 ID 将图形移到现有 XS 颜色层并另存 | Move shapes by ID to an existing XS color layer and save a revision |
@@ -150,6 +178,7 @@ Use `xtool-studio` in a new Codex session. For other MCP clients, configure **st
 - **M2。** 转换生成的 M2 XCS 默认使用 10W 蓝光模块。若实际安装了其他模块，请在 Studio 中核对机型和加工设置。
 - **实时操作。** 单个图形的实时选择和移动使用对象列表里的唯一 `shapeName`。按 ID 的编辑可用工程文件工具另存修订。辅助功能无法确认设备状态时返回 `unknown`，仅确认已触发按钮时可返回 `invoked`。
 - **加工。** 工具可以打开软件预览。加工参数建议是试样起点，使用前应核对机型、材料、尺寸和参数。
+- **关闭项目。** 关闭工具默认保留 Studio 的保存提示，并返回已关闭及仍打开的标签。确认要放弃全部未保存修改时，可用 `studio_close_all_projects` 传入 `{"onUnsaved":"discard"}`。
 
 - **DXF.** Conversion reads planar model-space contours. For a unitless drawing, specify `sourceUnits`, such as `mm`. Curves are approximated by polylines with a default flattening tolerance of 0.02 mm. Geometry is placed at the upper-left origin, and one operation applies to all contours. Clipped blocks, dimensions, text, and hatches cause a conversion error.
 - **SVG.** Conversion expects geometry in millimeter coordinates. Before export, apply scaling, group transforms, references, and clipping to the actual contours. Conversion rejects files containing transforms or definitions it cannot reproduce faithfully.
@@ -157,6 +186,7 @@ Use `xtool-studio` in a new Codex session. For other MCP clients, configure **st
 - **M2.** Generated M2 XCS projects default to the 10W blue laser module. Check the machine and settings in Studio if another module is installed.
 - **Live editing.** Select or move a single shape by its unique `shapeName` in the foreground editor’s object list. Use the file tools to edit by ID in a saved revision. The server can return `unknown` when the device indicator is unavailable and `invoked` when only the button action was confirmed.
 - **Processing.** The tools can open the software preview. Recommended settings are starting points for material tests. Check the machine, material, dimensions, and settings before processing.
+- **Closing projects.** The tools leave Studio save prompts open by default and report closed and remaining tabs. To discard all unsaved changes, call `studio_close_all_projects` with `{"onUnsaved":"discard"}`.
 
 ## 开发与来源 · Development and attribution
 
@@ -185,6 +215,8 @@ This project builds on the upstream machine knowledge base, project generators, 
 | **本地文件转换。** 新增平面 DXF 转 XCS，支持为无单位 DXF 指定源单位。新增直接读取本地 SVG 并保存为 XCS 的工具。 | **Local file conversion.** Convert planar DXF files to XCS with an explicit source unit for unitless drawings. A local SVG file can also be converted directly to XCS. |
 | **工程检查与另存修订。** 读取 XS v2 和 XCS 的画布、图形及加工参数。支持另存加工参数修订，以及在 XS 中改名或移动图形到已有颜色层。 | **Project inspection and revisions.** Read canvases, shapes, and processing settings in XS v2 and XCS. Save processing revisions to a new file, or rename layers and shapes and move shapes between existing color layers in XS. |
 | **xTool M2。** 新增机型条目及 XCS 生成支持，默认使用 10W 蓝光模块。 | **xTool M2.** Added a machine entry and XCS generation support with the 10W blue laser module as the default. |
+| **关闭项目。** Windows 支持按路径关闭单个项目，也支持关闭全部项目并按需放弃未保存修改。 | **Close projects.** On Windows, close a single project by path or close all projects with an option to discard unsaved changes. |
+| **M2 先印后切。** 用整板 PNG 和对位 DXF 生成多画布 XS v2 工程，分别绑定 CMYK 喷墨和 10W 蓝光激光加工。XS 检查会报告可用的激光功率、模块和先印后切模式。 | **M2 Print then Cut.** Generate a multi-canvas XS v2 project from full-board PNGs and aligned DXFs, with separate CMYK inkjet and 10W blue laser operations. XS inspection reports available laser power, module, and Print then Cut mode. |
 
 ### 修复与加固 · Fixes and safeguards
 

@@ -6,7 +6,7 @@ import { z } from "zod";
 import { promisify } from "node:util";
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import type { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
-import { editorSnapshotScript, moveObjectToLayerScript, previewScript, renameLayerScript, saveProjectScript, selectLayerScript, selectObjectScript, setSelectionParameterScript, summarizeEditors } from "./editor.js";
+import { closeProjectScript, editorSnapshotScript, moveObjectToLayerScript, previewScript, renameLayerScript, saveProjectScript, selectLayerScript, selectObjectScript, setSelectionParameterScript, summarizeEditors } from "./editor.js";
 import { withDesktopLock } from "./desktop-lock.js";
 import { openMacStudioProject, runMacStudio, type MacAction } from "./macos.js";
 
@@ -102,6 +102,83 @@ export function registerStudioTools(server: McpServer): void {
     description: "List live Studio project tabs and any exposed local path, canvas zoom, processing mode, and material.",
     annotations: readOnly
   }, () => readEditors(true));
+
+  const closeProjects = async (projectPath?: string, discard = false): Promise<CallToolResult> => {
+    const deadline = performance.now() + 50000;
+    try {
+      if (process.platform !== "win32") throw new Error("Closing Studio project tabs is currently supported on Windows.");
+      if (projectPath !== undefined && !isAbsolute(projectPath)) throw new Error("Provide an absolute project path.");
+      return await withDesktopLock(async () => {
+        const snapshot = await editorSnapshot();
+        const targets = projectPath === undefined ? snapshot : snapshot.filter(editor =>
+          editor.projectPath && projectPathKey(editor.projectPath) === projectPathKey(projectPath));
+        const identity = (editor: typeof snapshot[number]) => ({
+          title: editor.title, projectPath: editor.projectPath
+        });
+        const closed: ReturnType<typeof identity>[] = [];
+        let remaining = snapshot;
+        let status = "closed";
+        let stoppedAt: ReturnType<typeof identity> | null = null;
+        let message: string | undefined;
+        if (projectPath !== undefined && targets.length !== 1) {
+          status = targets.length ? "ambiguous_project" : "project_not_found";
+        } else {
+          while (remaining.length && (projectPath === undefined || !closed.length)) {
+            const target = projectPath === undefined ? remaining[0]! : targets[0]!;
+            if (performance.now() + 20000 >= deadline) {
+              status = "partial";
+              message = "Time budget reached. Call again to close the remaining tabs.";
+              break;
+            }
+            stoppedAt = identity(target);
+            if (remaining.filter(editor => editor.title === target.title).length !== 1) {
+              status = "ambiguous_or_changed_tab";
+              break;
+            }
+            let next: typeof snapshot;
+            try {
+              const { stdout } = await runStudioScript(closeProjectScript(target.projectPath, target.title, discard), 12000);
+              status = stdout.trim();
+              if (!["invoked", "discarded", "pending_discarded"].includes(status)) break;
+              await delay(250);
+              next = await editorSnapshot(7000);
+            } catch (error) {
+              status = "closure_unconfirmed";
+              message = studioError(error);
+              break;
+            }
+            const removed = remaining.filter(editor => !next.some(item =>
+              item.processId === editor.processId && item.title === editor.title && item.projectPath === editor.projectPath));
+            if (next.length !== remaining.length - 1 || removed.length !== 1 ||
+                (status !== "pending_discarded" && removed[0] !== target)) {
+              remaining = next;
+              status = "closure_unconfirmed";
+              break;
+            }
+            remaining = next;
+            closed.push(identity(removed[0]!));
+            stoppedAt = null;
+            status = "closed";
+          }
+        }
+        const result = { status, closed, remaining: remaining.map(identity), stoppedAt, message };
+        return { structuredContent: result, content: [{ type: "text", text: JSON.stringify(result) }] };
+      });
+    } catch (error) {
+      return { isError: true, content: [{ type: "text", text: studioError(error) }] };
+    }
+  };
+  const closeAnnotations = { readOnlyHint: false, destructiveHint: true, openWorldHint: false };
+  server.registerTool("studio_close_project", {
+    description: "Close the Studio tab matching an absolute project path on Windows. Leaves any Studio save prompt open for the user.",
+    inputSchema: { projectPath: z.string().min(1) },
+    annotations: closeAnnotations
+  }, ({ projectPath }) => closeProjects(projectPath));
+  server.registerTool("studio_close_all_projects", {
+    description: "Close open Studio project tabs on Windows. Stops at save prompts by default. Pass onUnsaved: discard only when explicitly authorized to discard all unsaved project changes.",
+    inputSchema: { onUnsaved: z.enum(["stop", "discard"]).default("stop") },
+    annotations: closeAnnotations
+  }, ({ onUnsaved }) => closeProjects(undefined, onUnsaved === "discard"));
 
   server.registerTool("studio_move_live_shape_to_layer", {
     description: "Move a shape with a unique visible name to an existing layer in the foreground Studio editor.",

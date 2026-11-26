@@ -97,7 +97,7 @@ const resolvedDxf = z.object({
   contours: z.array(z.object({ closed: z.boolean(), points: z.array(z.tuple([z.number(), z.number()])) }))
 });
 
-export async function loadDxf(path: string, sourceUnits: z.infer<typeof dxfUnits>, toleranceMm: number, op: OpParams) {
+export async function loadDxf(path: string, sourceUnits: z.infer<typeof dxfUnits>, toleranceMm: number, op: OpParams, topLeftMm?: { x: number; y: number }) {
   let stdout: string;
   try {
     const python = process.env.XTOOL_DXF_PYTHON || (process.platform === "win32" ? "python" : "python3");
@@ -129,7 +129,7 @@ export async function loadDxf(path: string, sourceUnits: z.infer<typeof dxfUnits
     shapes: contours.map(({ closed, points }, index) => ({
       id: `dxf-${index + 1}`,
       kind: closed ? "polygon" : "polyline",
-      points: points.map(([x, y]) => [x - minX, maxY - y]),
+      points: points.map(([x, y]) => [x - (topLeftMm?.x ?? minX), (topLeftMm?.y ?? maxY) - y]),
       op
     }))
   };

@@ -4,6 +4,7 @@ import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { buildXcs, getMachine, svgToDesign, validateXcs } from "@xtool-mcp/core";
 import { z } from "zod";
 import { dxfUnits, loadDxf } from "./dxf.js";
+import { createM2PrintCutProject, printAreaMm } from "./print-cut.js";
 import { inspectXs, moveXsShapesToLayer, renameXsLayer, renameXsShape, updateXsSettings } from "./xs.js";
 
 const localPath = (...extensions: string[]) =>
@@ -57,6 +58,34 @@ const xcsLaserOperations = new Set([
 ]);
 
 export function registerProjectTools(server: McpServer): void {
+  server.registerTool("studio_create_m2_print_cut_project", {
+    description: "Create a local XS v2 project for the M2 10W blue laser in Studio's Print then Cut mode (FREE_COMBINATION). Each board has a full-board PNG for the CMYK inkjet module and one aligned group of DXF contours for laser cutting. Centers each board within the right-hand 300 x 284 mm inkjet area, clear of the upper-left keep-out. The DXF top-left coordinates are in millimeters with Y up. Saves the project without starting processing.",
+    inputSchema: {
+      projectPath: localPath(".xs"),
+      boards: z.array(z.object({
+        name: z.string().regex(/^[A-Za-z0-9_-]{1,80}$/),
+        pngPath: localPath(".png"),
+        dxfPath: localPath(".dxf"),
+        widthMm: z.number().positive().max(printAreaMm.width),
+        heightMm: z.number().positive().max(printAreaMm.height),
+        dxfTopLeftXMm: z.number().finite(),
+        dxfTopLeftYMm: z.number().finite()
+      })).min(1).max(30).refine(boards => new Set(boards.map(board => board.name)).size === boards.length,
+        "Board names must be unique."),
+      materialThicknessMm: z.number().positive().finite(),
+      powerPct: z.number().min(1).max(100),
+      speedMmS: z.number().positive().finite(),
+      passes: z.number().int().min(1).max(50)
+    },
+    annotations: { readOnlyHint: false, destructiveHint: false, openWorldHint: false }
+  }, async ({ projectPath, boards, powerPct, speedMmS, passes, materialThicknessMm }) => {
+    try {
+      return result(await createM2PrintCutProject(projectPath, boards, powerPct, speedMmS, passes, materialThicknessMm));
+    } catch (error) {
+      return failure(error);
+    }
+  });
+
   server.registerTool("studio_convert_dxf_file", {
     description: "Convert a planar DXF drawing to a new XCS project. Preserve geometry in millimeters, including closed outlines and open lines. One processing operation is applied to all contours.",
     inputSchema: {
@@ -94,7 +123,7 @@ export function registerProjectTools(server: McpServer): void {
   });
 
   server.registerTool("studio_inspect_project", {
-    description: "Read a local XCS or Studio XS v2 project and list its canvases and shape geometry in millimeters.",
+    description: "Read a local XCS or Studio XS v2 project and list its canvases, active processing modes, and shape geometry in millimeters. On M2, FREE_COMBINATION is Print then Cut.",
     inputSchema: { projectPath: localPath(".xcs", ".xs") },
     annotations: { readOnlyHint: true, idempotentHint: true, openWorldHint: false }
   }, async ({ projectPath }) => {
