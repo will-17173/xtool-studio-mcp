@@ -77,24 +77,40 @@ export function svgToDesign(svg: string, options: SvgImportOptions = {}): Design
   if (svg.length > 500_000) {
     throw new Error("SVG is too large (500KB limit).");
   }
-  const { widthMm, heightMm } = readCanvasSize(svg);
+  // Remove inert metadata before recognizing geometry. In particular, an
+  // unreferenced definition does not correspond to a visible cutting contour.
+  const source = svg.replace(/<!--[\s\S]*?-->/g, "")
+    .replace(/<(?:title|desc|metadata)\b[^>]*>[\s\S]*?<\/(?:title|desc|metadata)\s*>/gi, "");
+  if (/<(?:defs|symbol|use|clipPath|mask|pattern|style|switch)\b/i.test(source)
+    || /\b(?:transform|clip-path|mask|display|visibility|opacity)\s*[:=]/i.test(source)
+    || (source.match(/<svg\b/gi)?.length ?? 0) !== 1) {
+    throw new Error("Flatten SVG transforms, definitions, clipping and visibility before conversion.");
+  }
+  const allowedElements = new Set(["svg", "g", "rect", "circle", "ellipse", "line", "polyline", "polygon", "path"]);
+  for (const [, element] of source.matchAll(/<\/?([A-Za-z_][\w:.-]*)\b/g)) {
+    if (!allowedElements.has(element!)) throw new Error(`Unsupported SVG element: ${element}. Flatten it to an explicit path before conversion.`);
+  }
+  const attrsOf = (tag: string): Record<string, string> => {
+    const attrs: Record<string, string> = {};
+    for (const m of tag.matchAll(/([a-zA-Z_:-][\w:.-]*)\s*=\s*(?:"([^"]*)"|'([^']*)')/g)) {
+      attrs[m[1]!] = m[2] ?? m[3]!;
+    }
+    return attrs;
+  };
+  const { widthMm, heightMm } = readCanvasSize(attrsOf(source.match(/<svg\b[^>]*>/)?.[0] ?? ""));
   const shapes: Shape[] = [];
   let counter = 0;
   const nextId = (): string => `svg-${++counter}`;
 
-  const attrsOf = (tag: string): Record<string, string> => {
-    const attrs: Record<string, string> = {};
-    for (const m of tag.matchAll(/([a-zA-Z_:-]+)\s*=\s*"([^"]*)"/g)) {
-      attrs[m[1]!] = m[2]!;
-    }
-    return attrs;
-  };
   const num = (v: string | undefined, d = 0): number => {
-    const f = parseFloat(v ?? "");
-    return Number.isFinite(f) ? f : d;
+    if (v === undefined) return d;
+    const match = v.trim().match(/^([+-]?(?:\d+(?:\.\d*)?|\.\d+)(?:e[+-]?\d+)?)(?:mm)?$/i);
+    const value = Number(match?.[1]);
+    if (!Number.isFinite(value)) throw new Error(`Unsupported SVG geometry value: ${v}`);
+    return value;
   };
 
-  for (const m of svg.matchAll(/<(rect|circle|ellipse|line|polyline|polygon|path)\b([^>]*)\/?>/g)) {
+  for (const m of source.matchAll(/<(rect|circle|ellipse|line|polyline|polygon|path)\b([^>]*)\/?>/g)) {
     const kind = m[1]!;
     const a = attrsOf(m[2]!);
     switch (kind) {
@@ -171,12 +187,30 @@ function parsePoints(s: string): Array<[number, number]> {
   return pts;
 }
 
-function readCanvasSize(svg: string): { widthMm: number; heightMm: number } {
-  const tag = svg.match(/<svg\b[^>]*>/)?.[0] ?? "";
-  const w = tag.match(/\bwidth\s*=\s*"([\d.]+)\s*mm"/);
-  const h = tag.match(/\bheight\s*=\s*"([\d.]+)\s*mm"/);
-  if (w && h) return { widthMm: parseFloat(w[1]!), heightMm: parseFloat(h[1]!) };
-  const vb = tag.match(/\bviewBox\s*=\s*"[\d.\-]+\s+[\d.\-]+\s+([\d.]+)\s+([\d.]+)"/);
-  if (vb) return { widthMm: parseFloat(vb[1]!), heightMm: parseFloat(vb[2]!) };
+function readCanvasSize(attributes: Record<string, string>): { widthMm: number; heightMm: number } {
+  const physical = (value: string | undefined) => {
+    if (value === undefined) return undefined;
+    const mm = Number(value.trim().match(/^([\d.]+)\s*mm$/i)?.[1]);
+    if (!(mm > 0) || !Number.isFinite(mm)) {
+      throw new Error("Set SVG viewport width and height in millimeters before conversion.");
+    }
+    return mm;
+  };
+  const width = physical(attributes.width);
+  const height = physical(attributes.height);
+  if ((width === undefined) !== (height === undefined)) {
+    throw new Error("Supply both SVG viewport dimensions in millimeters.");
+  }
+  if (attributes.viewBox !== undefined) {
+    const viewBox = attributes.viewBox.trim().split(/[\s,]+/).map(Number);
+    const [x, y, w, h] = viewBox;
+    if (viewBox.length !== 4 || !viewBox.every(Number.isFinite) || x !== 0 || y !== 0
+      || w === undefined || h === undefined || w <= 0 || h <= 0
+      || (width !== undefined && (w !== width || h !== height))) {
+      throw new Error("Normalize the SVG to a zero-origin viewBox with one drawing unit per millimeter before conversion.");
+    }
+    return { widthMm: w, heightMm: h };
+  }
+  if (width !== undefined && height !== undefined) return { widthMm: width, heightMm: height };
   return { widthMm: 200, heightMm: 200 };
 }

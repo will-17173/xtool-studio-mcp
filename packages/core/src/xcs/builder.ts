@@ -116,23 +116,145 @@ function shapeBounds(shape: Shape): Bounds {
         height: shape.fontSize
       };
     case "path":
-      return estimatePathBounds(shape.d);
+      return pathBounds(shape.d);
   }
 }
 
-/** Rough bbox for an absolute-coordinate SVG path (used for imported paths). */
-function estimatePathBounds(d: string): Bounds {
-  const nums = (d.match(/-?\d*\.?\d+(?:e-?\d+)?/gi) ?? []).map(Number);
-  const xs: number[] = [];
-  const ys: number[] = [];
-  for (let i = 0; i + 1 < nums.length; i += 2) {
-    xs.push(nums[i]!);
-    ys.push(nums[i + 1]!);
+type Point = [number, number];
+const commandSize: Record<string, number> = { M: 2, L: 2, H: 1, V: 1, C: 6, S: 4, Q: 4, T: 2, A: 7, Z: 0 };
+const pathToken = /[A-Za-z]|[+-]?(?:\d+\.?\d*|\.\d+)(?:e[+-]?\d+)?/gi;
+
+/** Compute the physical bounds without treating relative offsets or command flags as coordinates. */
+function pathBounds(d: string): Bounds {
+  const tokens = d.match(pathToken) ?? [];
+  const invalid = () => new Error("Invalid or unsupported SVG path data.");
+  if (!/^[Mm]$/.test(tokens[0] ?? "") || d.replace(pathToken, "").replace(/[\s,]/g, "")) throw invalid();
+  let x = Infinity, y = Infinity, right = -Infinity, bottom = -Infinity;
+  const include = (point: Point) => {
+    x = Math.min(x, point[0]);
+    y = Math.min(y, point[1]);
+    right = Math.max(right, point[0]);
+    bottom = Math.max(bottom, point[1]);
+  };
+  let current: Point = [0, 0];
+  let start: Point = current;
+  let command = "";
+  let previous = "";
+  let control: Point = current;
+  let drawn = false;
+  for (let i = 0; i < tokens.length;) {
+    const token = tokens[i]!;
+    if (/^[A-Za-z]$/.test(token)) {
+      command = token;
+      i++;
+    }
+    const op = command.toUpperCase();
+    const size = commandSize[op];
+    if (size === undefined || i + size > tokens.length) throw invalid();
+    const p = tokens.slice(i, i + size).map(Number);
+    if (!p.every(Number.isFinite)) throw invalid();
+    i += size;
+    const relative = command !== op;
+    const point = (j: number): Point => [
+      p[j]! + (relative ? current[0] : 0), p[j + 1]! + (relative ? current[1] : 0)
+    ];
+    const reflected = (): Point => [2 * current[0] - control[0], 2 * current[1] - control[1]];
+    let end = current;
+    if (op === "M") {
+      current = start = point(0);
+      command = relative ? "l" : "L";
+      previous = op;
+      continue;
+    }
+    include(current);
+    switch (op) {
+      case "L": end = point(0); break;
+      case "H": end = [p[0]! + (relative ? current[0] : 0), current[1]]; break;
+      case "V": end = [current[0], p[0]! + (relative ? current[1] : 0)]; break;
+      case "C":
+      case "S": {
+        const first = op === "C" ? point(0) : /[CS]/.test(previous) ? reflected() : current;
+        control = point(size - 4);
+        end = point(size - 2);
+        includeBezier([current, first, control, end], include);
+        break;
+      }
+      case "Q":
+      case "T":
+        control = op === "Q" ? point(0) : /[QT]/.test(previous) ? reflected() : current;
+        end = point(size - 2);
+        includeBezier([current, control, end], include);
+        break;
+      case "A":
+        end = point(5);
+        if (![p[3], p[4]].every(flag => flag === 0 || flag === 1)) throw invalid();
+        includeArc(current, end, p, include);
+        break;
+      case "Z":
+        end = start;
+        command = "";
+        break;
+    }
+    include(end);
+    current = end;
+    previous = op;
+    drawn = true;
   }
-  if (xs.length === 0) return { x: 0, y: 0, width: 0, height: 0 };
-  const minX = Math.min(...xs);
-  const minY = Math.min(...ys);
-  return { x: minX, y: minY, width: Math.max(...xs) - minX, height: Math.max(...ys) - minY };
+  if (!drawn || ![x, y, right, bottom].every(Number.isFinite)) throw invalid();
+  return { x, y, width: right - x, height: bottom - y };
+}
+
+function includeBezier(points: Point[], include: (point: Point) => void) {
+  for (const axis of [0, 1] as const) {
+    const d = points.slice(1).map((point, index) => point[axis] - points[index]![axis]);
+    const a = d.length === 3 ? d[0]! - 2 * d[1]! + d[2]! : 0;
+    const b = (d[1]! - d[0]!) * (d.length === 3 ? 2 : 1);
+    const c = d[0]!;
+    const discriminant = b * b - 4 * a * c;
+    const extrema = a === 0 ? (b === 0 ? [] : [-c / b]) : (discriminant < 0 ? []
+      : [(-b + Math.sqrt(discriminant)) / (2 * a), (-b - Math.sqrt(discriminant)) / (2 * a)]);
+    for (const t of extrema) {
+      if (!(t > 0 && t < 1)) continue;
+      let remaining = points;
+      while (remaining.length > 1) {
+        remaining = remaining.slice(1).map((p, i): Point => [
+          (1 - t) * remaining[i]![0] + t * p[0], (1 - t) * remaining[i]![1] + t * p[1]
+        ]);
+      }
+      include(remaining[0]!);
+    }
+  }
+}
+
+function includeArc(start: Point, end: Point, p: number[], include: (point: Point) => void) {
+  let rx = Math.abs(p[0]!), ry = Math.abs(p[1]!);
+  if (!rx || !ry || (start[0] === end[0] && start[1] === end[1])) return;
+  const rotation = (p[2]! % 360) * Math.PI / 180;
+  const cos = Math.cos(rotation), sin = Math.sin(rotation);
+  const dx = (start[0] - end[0]) / 2, dy = (start[1] - end[1]) / 2;
+  const ux = cos * dx + sin * dy, uy = -sin * dx + cos * dy;
+  const scale = Math.max(1, Math.hypot(ux / rx, uy / ry));
+  rx *= scale;
+  ry *= scale;
+  const radiusCheck = (ux / rx) ** 2 + (uy / ry) ** 2;
+  const coefficient = (p[3] === p[4] ? -1 : 1) * Math.sqrt(Math.max(0, 1 / radiusCheck - 1));
+  const cx = coefficient * rx * uy / ry, cy = -coefficient * ry * ux / rx;
+  const centerX = cos * cx - sin * cy + (start[0] + end[0]) / 2;
+  const centerY = sin * cx + cos * cy + (start[1] + end[1]) / 2;
+  const begin = Math.atan2((uy - cy) / ry, (ux - cx) / rx);
+  const finish = Math.atan2((-uy - cy) / ry, (-ux - cx) / rx);
+  const direction = p[4] === 1 ? 1 : -1;
+  const period = 2 * Math.PI;
+  const normalize = (angle: number) => (angle % period + period) % period;
+  const sweep = normalize(direction * (finish - begin));
+  const xExtreme = Math.atan2(-sin * ry, cos * rx);
+  const yExtreme = Math.atan2(cos * ry, sin * rx);
+  for (const angle of [xExtreme, xExtreme + Math.PI, yExtreme, yExtreme + Math.PI]) {
+    if (normalize(direction * (angle - begin)) <= sweep + 1e-12) {
+      include([centerX + cos * rx * Math.cos(angle) - sin * ry * Math.sin(angle),
+        centerY + sin * rx * Math.cos(angle) + cos * ry * Math.sin(angle)]);
+    }
+  }
 }
 
 function buildDisplay(shape: Shape): Record<string, unknown> {
@@ -194,8 +316,13 @@ function buildDisplay(shape: Shape): Record<string, unknown> {
         points: [],
         dPath: shapeToPathD(shape)
       };
-    case "path":
-      return { ...common, type: "PATH", isClosePath: true, points: [], dPath: shape.d };
+    case "path": {
+      const subpaths = shape.d.trim().split(/(?=[Mm])/);
+      return {
+        ...common, type: "PATH", isClosePath: subpaths.every(subpath => /[Zz]\s*$/.test(subpath)),
+        points: [], dPath: shape.d
+      };
+    }
     case "text":
       return {
         ...common,
@@ -329,7 +456,7 @@ export function buildXcs(design: Design, options: BuildXcsOptions = {}): BuiltXc
       id: extId,
       extId,
       extName,
-      power: machine ? (machine.laser_power_w[machine.laser_power_w.length - 1] ?? 0) : 0,
+      power: machine?.default_laser_power_w ?? machine?.laser_power_w.at(-1) ?? 0,
       materialList: [],
       data: {
         dataType: "Map",

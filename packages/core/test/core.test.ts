@@ -151,6 +151,67 @@ describe("SVG import", () => {
     expect(design.shapes[0]?.kind).toBe("rect");
     expect(design.widthMm).toBe(50);
   });
+
+  it("rejects SVG geometry that needs scaling or flattening", () => {
+    expect(() => svgToDesign('<svg width="100mm" height="100mm" viewBox="0 0 1000 1000"><rect width="200" height="300"/></svg>'))
+      .toThrow(/one drawing unit per millimeter/);
+    expect(() => svgToDesign('<svg><g transform="translate(10 20)"><rect width="3" height="4"/></g></svg>'))
+      .toThrow(/Flatten SVG/);
+    expect(() => svgToDesign('<svg><defs><rect width="3" height="4"/></defs></svg>'))
+      .toThrow(/Flatten SVG/);
+    expect(() => svgToDesign('<svg><rect width="3" height="4"/><image href="preview.png"/></svg>'))
+      .toThrow(/Unsupported SVG element: image/);
+  });
+
+  it("keeps open SVG paths open and ignores commented geometry", () => {
+    const design = svgToDesign("<svg viewBox='0 0 10 10'><!-- <rect width='5' height='5'/> --><path d='M0 0 L5 5'/><path d='M0 0 L5 5 L10 0 Z'/></svg>");
+    const { canvas } = JSON.parse(buildXcs(design).json);
+    expect(canvas[0].displays.map((display: { isClosePath: boolean }) => display.isClosePath)).toEqual([false, true]);
+  });
+
+  it("calculates bounds for relative segments, curves, and arcs", () => {
+    const design = svgToDesign('<svg><path d="M10 10 h10 v5 l-4 -3"/><path d="M0 0 C0 10 10 10 10 0"/><path d="M0 0 A5 5 0 0 1 10 0"/></svg>');
+    const { canvas } = JSON.parse(buildXcs(design).json);
+    expect(canvas[0].displays).toMatchObject([
+      { x: 10, y: 10, width: 10, height: 5 },
+      { x: 0, y: 0, width: 10, height: 7.5 },
+      { x: 0, y: -5, width: 10, height: 5 }
+    ]);
+  });
+});
+
+describe("XCS validation", () => {
+  it("validates processing references within the matching canvas", () => {
+    const doc = {
+      canvasId: "b", extId: "D1",
+      canvas: [
+        { id: "a", displays: [{ id: "a1", type: "RECT" }] },
+        { id: "b", displays: [{ id: "b1", type: "RECT" }] }
+      ],
+      device: {
+        data: {
+          dataType: "Map", value: [
+            ["a", { displays: { dataType: "Map", value: [["a1", {}]] } }],
+            ["b", { displays: { dataType: "Map", value: [["b1", {}]] } }]
+          ]
+        }
+      }
+    };
+    expect(validateXcs(doc)).toMatchObject({ valid: true, warnings: [], summary: expect.stringContaining("2 shape(s), 2 with processing") });
+    doc.device.data.value[1] = ["b", { displays: { dataType: "Map", value: [["a1", {}]] } }];
+    expect(validateXcs(doc).warnings).toEqual([
+      expect.stringContaining('Display "b1" on canvas "b" has no processing'),
+      expect.stringContaining('unknown display id "a1" on canvas "b"')
+    ]);
+  });
+
+  it("returns a structured error for null documents or nested displays", () => {
+    expect(validateXcs("null").valid).toBe(false);
+    expect(validateXcs({
+      canvasId: "a", canvas: [{ id: "a", displays: [] }, { id: "b", displays: [null] }],
+      device: { data: { dataType: "Map", value: [] } }
+    }).errors).toContain('Canvas "b" display[0] missing string id.');
+  });
 });
 
 describe("input limits & clamping", () => {

@@ -223,6 +223,28 @@
     ]
   },
   {
+    "id": "m2",
+    "name": "xTool M2",
+    "category": "hybrid",
+    "laser_power_w": [10, 20, 40, 3],
+    "default_laser_power_w": 10,
+    "work_area_mm": { "width": 426, "height": 320 },
+    "max_pass_through_thickness_mm": null,
+    "supported_software": ["Studio"],
+    "connectivity": [],
+    "driver": null,
+    "key_features": [
+      "Interchangeable 10W, 20W and 40W blue diode modules",
+      "Optional 3W infrared module and CMYK inkjet module"
+    ],
+    "release_era": null,
+    "product_url": "https://www.xtool.com/products/xtool-m2-color-craft-laser-cutter-engraver",
+    "xcs_ext_id": "JS002",
+    "xcs_ext_name": "M2",
+    "notes": "The catalog work area is for the 10W and 20W modules. The 40W area is 426 × 312 mm. The Studio project model code JS002 was checked against a local M2 project.",
+    "sources": ["https://support.xtool.com/article/3324"]
+  },
+  {
     "id": "m1-ultra",
     "name": "xTool M1 Ultra",
     "category": "hybrid",

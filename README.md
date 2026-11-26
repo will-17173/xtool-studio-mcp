@@ -1,107 +1,132 @@
-# xtool-mcp
+# xTool Studio MCP
 
-**An unofficial [Model Context Protocol](https://modelcontextprotocol.io) server, agent, and `llms.txt` for [xTool](https://www.xtool.com) laser machines** — so you can bring an xTool-savvy assistant into your design studio and the AI client of your choice.
+本地 MCP 服务，连接 Codex 等客户端与 xTool Studio。可将 DXF 或 SVG 转成 XCS 工程，检查和修订本地工程，以及操作正在运行的 Studio。Windows 桌面功能已在 Studio 1.9.11 验证，macOS 桌面适配仍待实机验证。
 
-> ⚠️ **Unofficial & safety notice.** Not affiliated with, endorsed by, or sponsored by xTool. Everything here — settings, generated `.xcs` files, project designs — is **guidance, not a guarantee**. Always test on scrap. **Never cut PVC/vinyl or chlorine-containing materials.** Never run a laser unattended. See [DISCLAIMER.md](./DISCLAIMER.md).
+A local MCP server that connects Codex and other MCP clients to xTool Studio. Convert DXF or SVG to XCS, inspect and revise saved projects, and work with the running Studio editor. Windows desktop features were tested with Studio 1.9.11. The macOS adapter awaits testing on a Mac.
 
-## What it does
+## 安装与连接 · Setup
 
-- **Machine knowledge** — specs, work area, laser type, and supported software for the current xTool lineup (D1 family, S1, M1/M1 Ultra, F1/F1 Ultra/F2 series, P2/P3, MetalFab).
-- **Material settings** — power/speed/passes/DPI starting points with **provenance, confidence, and safety caveats** — plus a "run a test grid" path when there's no good data.
-- **Software & troubleshooting** — XCS vs Studio workflow help and symptom → cause → fix guidance.
-- **Design generation** — produce cut-ready `.xcs` (and SVG): material **test grids**, **finger-joint boxes**, and **SVG → .xcs** conversion.
-- **Runs anywhere** — one shared core, two entry points: a local **stdio** server (`npx xtool-mcp`) and a remote **Cloudflare Worker** (Streamable HTTP).
+需要 Windows 或 macOS、Node.js 18+ 和 pnpm。仓库指定 pnpm 10.34.3。使用 DXF 转换时，还需要安装了 `ezdxf` 的 Python。
 
-## Quick start
+Requires Windows or macOS, Node.js 18+, and pnpm. The repository pins pnpm 10.34.3. DXF conversion also requires Python with `ezdxf` installed.
 
-### Use the hosted remote server
+在 Windows 上，从项目根目录运行以下 PowerShell 命令。 / On Windows, run these PowerShell commands from the project root.
 
-Add this Streamable HTTP endpoint to any MCP client:
+```powershell
+pnpm install --frozen-lockfile
+pnpm build
 
-```
-https://xtool-mcp.doublexl.workers.dev/mcp
-```
+# Optional for DXF conversion
+python -m pip install ezdxf
 
-### Run locally (stdio)
-
-```json
-{
-  "mcpServers": {
-    "xtool": { "command": "npx", "args": ["-y", "xtool-mcp"] }
-  }
-}
+# Register with Codex
+$entry = (Resolve-Path '.\packages\stdio\dist\index.js').Path
+codex mcp add xtool-studio -- (Get-Command node.exe).Source $entry
+codex mcp get xtool-studio
 ```
 
-Drop that into Claude Desktop's `claude_desktop_config.json` or Cursor's `mcp.json`
-(see [`agent/clients/`](./agent/clients/)), and paste [`agent/system-prompt.md`](./agent/system-prompt.md)
-into your client's system-prompt field for the full "xTool laser assistant" persona.
+在 macOS 上，从项目根目录运行以下命令。 / On macOS, run these commands from the project root.
 
-## What's inside
+```sh
+pnpm install --frozen-lockfile
+pnpm build
 
-### Tools
-| Tool | Purpose |
-|---|---|
-| `list_machines` / `get_machine_specs` | Browse the machine catalog |
-| `recommend_settings` | Power/speed/passes/DPI for a machine + material + thickness (with confidence + safety) |
-| `search_knowledge` | Semantic/keyword search across machines, guides, troubleshooting, safety |
-| `troubleshoot` | Likely causes and ordered fixes for a symptom |
-| `generate_test_grid` | A `.xcs`/SVG grid varying two parameters (power vs speed) |
-| `create_box` | Finger-joint box/tray panels as `.xcs`/SVG |
-| `svg_to_xcs` | Convert an SVG into a cut-ready `.xcs` |
-| `validate_xcs` | Check a `.xcs` for common structural problems |
+# Optional for DXF conversion
+python3 -m pip install ezdxf
 
-### Resources
-`xtool://machines`, `xtool://machines/{id}`, `xtool://materials`,
-`xtool://troubleshooting`, `xtool://guides/{id}`, `xtool://safety`, `xtool://xcs-format`.
+codex mcp add xtool-studio --env "XTOOL_DXF_PYTHON=$(command -v python3)" -- "$(command -v node)" "$PWD/packages/stdio/dist/index.js"
+codex mcp get xtool-studio
+```
 
-### Prompts
-`dial_in_settings`, `design_finger_joint_box`, `convert_svg_to_project`,
-`troubleshoot_issue`, `plan_beginner_project`, `material_safety_check`.
+macOS 上的桌面查询和编辑通过系统辅助功能接口运行。按系统提示，允许启动 MCP 的应用控制「系统事件」，并在「系统设置 → 隐私与安全性 → 辅助功能」授予权限。实时编辑依赖 Studio 公开的控件，找不到目标工程或控件时会返回未确认状态。
 
-## The `.xcs` format
+On macOS, desktop inspection and editing use the system accessibility interface. If prompted, allow the app hosting the MCP server to control System Events and grant Accessibility access in System Settings under Privacy & Security. Live editing depends on which controls Studio exposes. The server reports when it cannot identify the project or control.
 
-`.xcs` is xTool's project file. It's **community-reverse-engineered** (plain JSON;
-shapes in `canvas[0].displays`; laser parameters in a parallel `device.data` Map keyed
-by shape id). This project generates the well-trodden single-file JSON used by D1/F1-class
-machines. **Open generated files in Studio/XCS and verify before running.** Full writeup:
-[`docs/xcs-format.md`](./docs/xcs-format.md).
+在新的 Codex 会话中使用 `xtool-studio`。其他 MCP 客户端可配置 **stdio**，命令设为 Node.js 可执行文件，唯一参数为 `packages/stdio/dist/index.js` 的绝对路径。如果客户端找不到安装了 `ezdxf` 的 Python，可在客户端的服务环境中设置 `XTOOL_DXF_PYTHON` 指向该解释器。
 
-## Development
+Use `xtool-studio` in a new Codex session. For other MCP clients, configure **stdio** with the Node.js executable as the command and the absolute path to `packages/stdio/dist/index.js` as its sole argument. If the client cannot find the Python interpreter containing `ezdxf`, set `XTOOL_DXF_PYTHON` in the server environment to that interpreter’s path.
 
-Requires Node ≥ 18 and pnpm.
+## 常用流程 · Common workflows
 
-```bash
-pnpm install
-pnpm build            # build core + stdio
+- **DXF 或 SVG 转工程。** 用 `studio_convert_dxf_file` 或 `studio_convert_svg_file`，提供源文件和输出文件的绝对路径、机型及加工参数。用 `studio_open_project` 打开生成的 XCS，然后核对尺寸和刀线。
+- **在 Studio 中编辑。** 用 `studio_list_editors` 查看工程和选区，选择图层或图形，修改参数，然后预览。已有本地 XS 工程可用 `studio_save_live_project` 保存。
+- **另存工程修订。** 先用 `studio_inspect_project` 获取画布 ID 和图形 ID，再将修改写入新的 XS 或 XCS 文件。文件修订工具要求使用新的输出路径。
+
+- **Create a project from DXF or SVG.** Pass absolute input and output paths, the machine model, and processing values to `studio_convert_dxf_file` or `studio_convert_svg_file`. Open the generated XCS with `studio_open_project` and check dimensions and contours.
+- **Edit in Studio.** Use `studio_list_editors` to inspect the project and selection. Select a layer or shape, set its parameters, and open the preview. Use `studio_save_live_project` to save an existing local XS project.
+- **Write a project revision.** Use `studio_inspect_project` to get canvas and shape IDs, then write edits to a new XS or XCS file. File revision tools require a new output path.
+
+## 工具清单 · Tool reference
+
+### Studio 实时操作 · Live Studio tools
+
+| 工具 / Tool | 中文 | English |
+| --- | --- | --- |
+| `studio_status` | 查看 Studio 窗口、进程和版本 | Report Studio windows, processes, and versions |
+| `studio_list_editors` | 查看工程标签和可读的画布、图层及选区 | List project tabs and available canvas, layer, and selection details |
+| `studio_device_status` | 读取 Studio 显示的设备连接状态 | Read the connection indicator shown by Studio |
+| `studio_open_project` | 打开 XS 或 XCS 并尝试按完整路径确认标签 | Open XS or XCS and check for a tab matching the full path |
+| `studio_select_layer` | 按名称选中图层中的对象 | Select objects on a named layer |
+| `studio_select_shape` | 按对象列表中的唯一名称选择 XS 图形 | Select an XS shape by its unique name in the live object list |
+| `studio_rename_live_layer` | 重命名前台工程中的图层 | Rename a layer in the foreground project |
+| `studio_move_live_shape_to_layer` | 将有唯一名称的 XS 图形移到现有图层 | Move a uniquely named XS shape to an existing layer |
+| `studio_set_selection_parameter` | 修改选区的功率、速度或遍数，每次一项 | Set one power, speed, or pass-count field for the selection |
+| `studio_save_live_project` | 保存前台本地 XS 并检查磁盘更新 | Save the foreground local XS and check for a disk update |
+| `studio_open_preview` | 打开 Studio 加工预览 | Open Studio’s processing preview |
+
+### 本地文件 · Local project files
+
+| 工具 / Tool | 中文 | English |
+| --- | --- | --- |
+| `studio_convert_dxf_file` | 将平面 DXF 转为 XCS | Convert a planar DXF file to XCS |
+| `studio_convert_svg_file` | 将本地 SVG 转为 XCS | Convert a local SVG file to XCS |
+| `studio_inspect_project` | 读取 XS v2 或 XCS 的画布、图形及可用参数 | Inspect canvases, shapes, and available settings in XS v2 or XCS |
+| `studio_rename_project_layer` | 重命名 XS 图层并另存 | Save an XS revision with a renamed layer |
+| `studio_move_shapes_to_layer` | 按 ID 将图形移到现有 XS 颜色层并另存 | Move shapes by ID to an existing XS color layer and save a revision |
+| `studio_rename_project_shape` | 按 ID 给 XS 图形命名并另存 | Name an XS shape by ID and save a revision |
+| `studio_update_project_settings` | 修改指定激光图形的参数并另存 XS 或 XCS | Update settings for selected laser shapes in an XS or XCS revision |
+
+### 机型、知识库与设计生成 · Machines, knowledge, and design
+
+| 工具 / Tool | 中文 | English |
+| --- | --- | --- |
+| `list_machines` | 列出机型库中的设备 | List machines in the catalog |
+| `get_machine_specs` | 查询机型规格和加工范围 | Read machine specifications and work area |
+| `recommend_settings` | 按机型和材料查询加工参数起点 | Find starting settings for a machine and material |
+| `search_knowledge` | 搜索 xTool 知识库 | Search the xTool knowledge base |
+| `troubleshoot` | 按症状查找可能原因和处理方法 | Find likely causes and fixes for a symptom |
+| `generate_test_grid` | 生成 SVG 或 XCS 材料测试网格 | Generate an SVG or XCS material test grid |
+| `create_box` | 生成 SVG 或 XCS 指接盒刀路 | Generate SVG or XCS finger-joint box panels |
+| `svg_to_xcs` | 将传入的 SVG 文本转为 XCS | Convert inline SVG text to XCS |
+| `validate_xcs` | 检查 XCS 文件结构及图形引用 | Check XCS structure and shape references |
+
+## 格式与使用限制 · Formats and limitations
+
+- **DXF。** 读取模型空间的平面刀路。无单位文件需指定 `sourceUnits`，例如 `mm`。曲线默认以 0.02 mm 的展平容差近似为折线。转换将图形移至左上角原点，并为全部轮廓使用一套加工参数。带裁剪的块、标注、文字和填充会导致转换报错。
+- **SVG。** 转换要求图形使用毫米坐标。导出前请把缩放、分组变换、引用和裁剪应用到实际刀路。含有无法保真转换的坐标变换或定义的文件会报错。
+- **XS / XCS。** Studio 原生工程的读取与修订支持 XS v2。SVG 和 DXF 转换生成 XCS。对 XS 文件按图形修改加工参数时，每个目标图形须对应一项可解析的激光操作。
+- **M2。** 转换生成的 M2 XCS 默认使用 10W 蓝光模块。若实际安装了其他模块，请在 Studio 中核对机型和加工设置。
+- **实时操作。** 单个图形的实时选择和移动使用对象列表里的唯一 `shapeName`。按 ID 的编辑可用工程文件工具另存修订。辅助功能无法确认设备状态时返回 `unknown`，仅确认已触发按钮时可返回 `invoked`。
+- **加工。** 工具可以打开软件预览。加工参数建议是试样起点，使用前应核对机型、材料、尺寸和参数。
+
+- **DXF.** Conversion reads planar model-space contours. For a unitless drawing, specify `sourceUnits`, such as `mm`. Curves are approximated by polylines with a default flattening tolerance of 0.02 mm. Geometry is placed at the upper-left origin, and one operation applies to all contours. Clipped blocks, dimensions, text, and hatches cause a conversion error.
+- **SVG.** Conversion expects geometry in millimeter coordinates. Before export, apply scaling, group transforms, references, and clipping to the actual contours. Conversion rejects files containing transforms or definitions it cannot reproduce faithfully.
+- **XS / XCS.** Native project inspection and revision support XS v2. SVG and DXF conversion produce XCS. Editing processing settings in an XS file requires one resolvable laser operation per target shape.
+- **M2.** Generated M2 XCS projects default to the 10W blue laser module. Check the machine and settings in Studio if another module is installed.
+- **Live editing.** Select or move a single shape by its unique `shapeName` in the foreground editor’s object list. Use the file tools to edit by ID in a saved revision. The server can return `unknown` when the device indicator is unavailable and `invoked` when only the button action was confirmed.
+- **Processing.** The tools can open the software preview. Recommended settings are starting points for material tests. Check the machine, material, dimensions, and settings before processing.
+
+## 开发与来源 · Development and attribution
+
+```powershell
+pnpm build
 pnpm typecheck
 pnpm test
-pnpm start:stdio      # run the local MCP server
-pnpm dev:worker       # run the Cloudflare Worker locally
-pnpm build:llms       # regenerate llms.txt / llms-full.txt
-pnpm build:embeddings # (optional) precompute the Workers AI search index
+pnpm start:stdio
 ```
 
-Architecture: [`docs/architecture.md`](./docs/architecture.md) ·
-Data model & how to contribute settings: [`docs/data-model.md`](./docs/data-model.md),
-[CONTRIBUTING.md](./CONTRIBUTING.md).
+本项目基于上游项目的机型知识库、工程生成器、MCP 资源及提示词，保留原有 MIT 许可和 Git 历史。仓库也保留上游 Cloudflare Worker 的源码，Studio 桌面工具通过本地 stdio 服务使用。
 
-### Deploy the Worker
+This project builds on the upstream machine knowledge base, project generators, MCP resources, and prompts. It retains the original MIT license and Git history. The repository also contains the upstream Cloudflare Worker source. Studio desktop tools run through the local stdio server.
 
-```bash
-cd packages/worker
-pnpm dlx wrangler deploy   # deploys to xtool-mcp.<account>.workers.dev with an AI binding
-```
-
-The Worker also serves [`/llms.txt`](https://xtool-mcp.doublexl.workers.dev/llms.txt)
-and `/llms-full.txt`, generated live from the knowledge base.
-
-## Contributing
-
-Material settings especially benefit from real-world data — see
-[CONTRIBUTING.md](./CONTRIBUTING.md). Every settings row needs a source and an honest
-confidence level.
-
-## License
-
-[MIT](./LICENSE). "xTool", "xTool Creative Space", and "xTool Studio" are trademarks of
-their respective owners, used here only to describe compatibility.
+[上游项目 / Upstream project](https://github.com/iamcoyr/xtool-mcp) · [架构 / Architecture](./docs/architecture.md) · [XCS 格式 / XCS format](./docs/xcs-format.md) · [贡献 / Contributing](./CONTRIBUTING.md) · [使用说明 / Disclaimer](./DISCLAIMER.md) · [MIT 许可 / License](./LICENSE)

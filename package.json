@@ -1,5 +1,5 @@
 {
-  "name": "xtool-mcp-monorepo",
+  "name": "xtool-studio-mcp-workspace",
   "version": "0.1.0",
   "private": true,
   "type": "module",
@@ -12,7 +12,7 @@
     "build": "pnpm -r --filter=./packages/* build",
     "typecheck": "pnpm -r typecheck",
     "test": "pnpm -r test",
-    "start:stdio": "pnpm --filter xtool-mcp start",
+    "start:stdio": "pnpm --filter xtool-studio-mcp start",
     "dev:worker": "pnpm --filter @xtool-mcp/worker dev",
     "deploy:worker": "pnpm --filter @xtool-mcp/worker deploy",
     "build:embeddings": "tsx scripts/build-embeddings.ts",

@@ -19,6 +19,8 @@ export interface Machine {
   category: LaserCategory;
   /** Available laser module wattages (optical watts). */
   laser_power_w: number[];
+  /** Module wattage used when generating a project without a module selection. */
+  default_laser_power_w?: number;
   /** Null for machines with no fixed engraving bed (e.g. handheld welders). */
   work_area_mm: { width: number; height: number } | null;
   max_pass_through_thickness_mm: number | null;
