@@ -4,6 +4,16 @@
 
 A local MCP server that connects Codex and other MCP clients to xTool Studio. Convert DXF or SVG to XCS, inspect and revise saved projects, and work with the running Studio editor. Windows desktop features were tested with Studio 1.9.11. The macOS adapter awaits testing on a Mac.
 
+## 功能演示 · Demo
+
+[观看 12 秒演示 / Watch the 12-second demo (MP4)](./docs/media/studio-demo.mp4)
+
+演示使用一个测试板件，从 SVG 生成 XCS，在 Studio 打开并查看图层和对象，最后打开 3D 加工预览。 / The demo converts a sample SVG panel to XCS, opens it in Studio, inspects its layers and objects, and opens the 3D processing preview.
+
+| 图层与对象 · Layers and objects | 3D 加工预览 · 3D processing preview |
+| --- | --- |
+| ![Studio 图层和对象列表及测试板件轮廓 / Studio layers, objects, and sample contours](./docs/media/studio-layers.png) | ![Studio 中显示圆孔与矩形开口的三维预览 / Studio 3D preview of the circular and rectangular cutouts](./docs/media/studio-preview.png) |
+
 ## 安装与连接 · Setup
 
 需要 Windows 或 macOS、Node.js 18+ 和 pnpm。仓库指定 pnpm 10.34.3。使用 DXF 转换时，还需要安装了 `ezdxf` 的 Python。
