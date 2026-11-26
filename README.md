@@ -101,12 +101,16 @@ Use `xtool-studio` in a new Codex session. For other MCP clients, configure **st
 ### M2 先印后切 · M2 Print then Cut
 
 1. 为每张板准备一张覆盖整板的 PNG 和一份与它共用坐标的平面 DXF。DXF 需要声明长度单位，PNG 的宽高比应与板材尺寸一致。
-2. 调用 `studio_create_m2_print_cut_project`，指定一个新的绝对 `.xs` 输出路径。每张板传入唯一的 `name`、绝对 `pngPath` 和 `dxfPath`、板材尺寸 `widthMm` 和 `heightMm`，以及 PNG 左上角在 DXF 坐标中的 `dxfTopLeftXMm` 和 `dxfTopLeftYMm`。坐标以毫米为单位，DXF 的 Y 轴向上。整份工程共用 `materialThicknessMm`、`powerPct`、`speedMmS` 和 `passes`。
+2. 调用 `studio_create_m2_print_cut_project`，指定一个新的绝对 `.xs` 输出路径。每张板传入唯一的 `name`、绝对 `pngPath` 和 `dxfPath`、板材尺寸 `widthMm` 和 `heightMm`，以及 PNG 左上角在 DXF 坐标中的 `dxfTopLeftXMm` 和 `dxfTopLeftYMm`。坐标以毫米为单位，DXF 的 Y 轴向上。整份工程共用 `powerPct`、`speedMmS` 和 `passes`。可将已绑定材料的 Studio 项目用 `studio_inspect_project` 回读，再传入返回的 `materialPreset`。仅在设备已测距时传入 `measuredMaterialHeightMm`（材料表面到机器底板的高度）。旧参数 `materialThicknessMm` 已弃用，传入时会忽略。
 3. 工具为每张板生成一个画布，在右侧 300 × 284 mm 喷墨区域内居中放置整板图稿和成组刀线。用 `studio_inspect_project` 确认模式为 **Print then Cut**，再用 `studio_open_project` 在 Studio 中核对印切对位和参数。
 
 1. Prepare one full-board PNG and a planar DXF that shares its coordinate system for each board. The DXF must declare its drawing units, and the PNG aspect ratio must match the board dimensions.
-2. Call `studio_create_m2_print_cut_project` with an absolute path for a new `.xs` file. For each board, supply a unique `name`, absolute `pngPath` and `dxfPath`, board dimensions `widthMm` and `heightMm`, and the PNG's top-left corner in DXF coordinates as `dxfTopLeftXMm` and `dxfTopLeftYMm`. Coordinates are in millimeters with Y pointing up in the DXF. All boards share `materialThicknessMm`, `powerPct`, `speedMmS`, and `passes`.
+2. Call `studio_create_m2_print_cut_project` with an absolute path for a new `.xs` file. For each board, supply a unique `name`, absolute `pngPath` and `dxfPath`, board dimensions `widthMm` and `heightMm`, and the PNG's top-left corner in DXF coordinates as `dxfTopLeftXMm` and `dxfTopLeftYMm`. Coordinates are in millimeters with Y pointing up in the DXF. All boards share `powerPct`, `speedMmS`, and `passes`. To bind a Studio preset, pass the `materialPreset` returned by `studio_inspect_project` for a canvas with that preset selected. Supply `measuredMaterialHeightMm` only after device measurement of the height above the machine base. The legacy `materialThicknessMm` argument is ignored.
 3. The tool creates one canvas per board, centering the artwork and grouped cut contours in the right-hand 300 × 284 mm inkjet area. Check for **Print then Cut** mode with `studio_inspect_project`, then use `studio_open_project` to review alignment and settings in Studio.
+
+材料预设 ID 可能仅适用于原来的 Studio 安装。建议从同一台电脑上已选好材料的 M2 先印后切工程读取，并在新工程里核对。绑定预设后，仍需显式提供切割功率、速度和遍数。板材标称厚度（例如 3 mm）与设备测得的材料表面高度是不同的输入。
+
+Material preset IDs can be specific to a Studio installation. Read the preset from a saved M2 Print then Cut project on the same computer, then check it in the new project. Power, speed, and passes are still required. Nominal board thickness, such as 3 mm, and the device-measured surface height are separate values.
 
 ### 关闭全部项目 · Close all projects
 

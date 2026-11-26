@@ -72,15 +72,24 @@ export function registerProjectTools(server: McpServer): void {
         dxfTopLeftYMm: z.number().finite()
       })).min(1).max(30).refine(boards => new Set(boards.map(board => board.name)).size === boards.length,
         "Board names must be unique."),
-      materialThicknessMm: z.number().positive().finite(),
+      materialPreset: z.object({
+        id: z.union([z.string().trim().min(1).refine(id => id !== "0"), z.number().int().positive()]),
+        precautionCodes: z.array(z.string()).optional()
+      }).optional().describe("Existing Studio material preset ID and optional precaution codes from studio_inspect_project. Local IDs are specific to the Studio installation."),
+      measuredMaterialHeightMm: z.number().nonnegative().finite().optional()
+        .describe("Height above the machine base measured by the device. Omit until measured."),
+      materialThicknessMm: z.number().positive().finite().optional()
+        .describe("Deprecated. Accepted for compatibility and ignored."),
       powerPct: z.number().min(1).max(100),
       speedMmS: z.number().positive().finite(),
       passes: z.number().int().min(1).max(50)
     },
     annotations: { readOnlyHint: false, destructiveHint: false, openWorldHint: false }
-  }, async ({ projectPath, boards, powerPct, speedMmS, passes, materialThicknessMm }) => {
+  }, async ({ projectPath, boards, powerPct, speedMmS, passes, materialPreset, measuredMaterialHeightMm }) => {
     try {
-      return result(await createM2PrintCutProject(projectPath, boards, powerPct, speedMmS, passes, materialThicknessMm));
+      return result(await createM2PrintCutProject(
+        projectPath, boards, powerPct, speedMmS, passes, materialPreset, measuredMaterialHeightMm
+      ));
     } catch (error) {
       return failure(error);
     }
@@ -123,7 +132,7 @@ export function registerProjectTools(server: McpServer): void {
   });
 
   server.registerTool("studio_inspect_project", {
-    description: "Read a local XCS or Studio XS v2 project and list its canvases, active processing modes, and shape geometry in millimeters. On M2, FREE_COMBINATION is Print then Cut.",
+    description: "Read a local XCS or Studio XS v2 project and list its canvases, active processing modes, Print then Cut material preset IDs and stored material heights, and shape geometry in millimeters. On M2, FREE_COMBINATION is Print then Cut.",
     inputSchema: { projectPath: localPath(".xcs", ".xs") },
     annotations: { readOnlyHint: true, idempotentHint: true, openWorldHint: false }
   }, async ({ projectPath }) => {

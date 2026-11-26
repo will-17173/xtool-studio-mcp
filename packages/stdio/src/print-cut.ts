@@ -20,9 +20,15 @@ export interface PrintCutBoard {
   dxfTopLeftYMm: number;
 }
 
+export interface PrintCutMaterialPreset {
+  id: string | number;
+  precautionCodes?: string[];
+}
+
 export async function createM2PrintCutProject(
   projectPath: string, boards: PrintCutBoard[],
-  powerPct: number, speedMmS: number, passes: number, materialThicknessMm: number
+  powerPct: number, speedMmS: number, passes: number,
+  materialPreset?: PrintCutMaterialPreset, measuredMaterialHeightMm?: number
 ) {
   const archive: Record<string, Uint8Array> = { ".format": strToU8("v2") };
   const add = (path: string, value: unknown) => { archive[path] = strToU8(JSON.stringify(value)); };
@@ -135,7 +141,9 @@ export async function createM2PrintCutProject(
     });
     processing[canvasId] = { id: canvasId, activeMode: printCutMode, modes: {
       [printCutMode]: {
-        ignoredDisplayIds: [], data: { material: 0, thickness: materialThicknessMm,
+        ignoredDisplayIds: [], data: {
+          material: materialPreset?.id ?? 0, thickness: measuredMaterialHeightMm ?? null,
+          ...(materialPreset?.precautionCodes && { precautionCodes: materialPreset.precautionCodes }),
           isProcessByLayer: false, pathPlanning: "auto", fillPlanning: "separate", enableRemoveCommonEdge: false },
         profileRefs: [printProfile, cutProfile], patches: {},
         bindings: [bind(printProfile, [image.id]), bind(cutProfile, cuts.map(cut => cut.id))]
@@ -170,5 +178,7 @@ export async function createM2PrintCutProject(
     modules: { canvases: canvasIds, devices: [deviceId] }, customProjectData: { projectTraceID: projectId }
   });
   await writeFile(projectPath, zipSync(archive, { level: 3 }), { flag: "wx" });
-  return { projectPath, machine: "M2", laserPowerW: 10, mode: printCutMode, modeName: "Print then Cut", canvases: summary };
+  return { projectPath, machine: "M2", laserPowerW: 10, mode: printCutMode, modeName: "Print then Cut",
+    materialPresetId: materialPreset?.id ?? null, materialHeightMm: measuredMaterialHeightMm ?? null,
+    canvases: summary };
 }

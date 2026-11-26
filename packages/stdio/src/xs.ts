@@ -41,6 +41,7 @@ const bindingSchema = record.extend({
 const processingSchema = z.record(record.extend({
   activeMode: z.string(),
   modes: z.record(record.extend({
+    data: record.optional(),
     ignoredDisplayIds: z.array(z.string()).optional(),
     bindings: z.array(bindingSchema),
     patches: z.record(record.extend({ profileId: z.string(), overrides: record })).optional()
@@ -148,8 +149,17 @@ export async function inspectXs(path: string) {
           };
         });
       });
+      const data = mode === printCutMode ? processing[id]?.modes[mode]?.data : undefined;
+      const material = data?.material;
+      const materialPreset = (typeof material === "string" || typeof material === "number") &&
+        material !== "" && material !== 0 && material !== "0"
+        ? { id: material, precautionCodes: z.array(z.string()).safeParse(data?.precautionCodes).data }
+        : null;
       return { id, name: canvas.title, layers: canvas.layerData, mode,
-        ...(activeDevice?.extId === "JS002" && mode === printCutMode && { modeName: "Print then Cut" }), shapes };
+        ...(activeDevice?.extId === "JS002" && mode === printCutMode && {
+          modeName: "Print then Cut", materialPreset,
+          materialHeightMm: typeof data?.thickness === "number" ? data.thickness : null
+        }), shapes };
     })
   };
 }
